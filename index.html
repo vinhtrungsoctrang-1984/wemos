@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bảng Điều Khiển IoT</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background-color: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 15px;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+        h2 { color: #333; margin-bottom: 25px; font-size: 24px; }
+        h3 { color: #333; margin-bottom: 12px; font-size: 18px; }
+
+        .btn-control {
+            width: 160px;
+            height: 160px;
+            border-radius: 50%;
+            border: none;
+            font-size: 22px;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+        }
+        .status-on {
+            background: linear-gradient(135deg, #28a745, #1e7e34);
+            box-shadow: 0 0 25px rgba(40, 167, 69, 0.5);
+        }
+        .status-off {
+            background: linear-gradient(135deg, #dc3545, #bd2130);
+            box-shadow: 0 0 25px rgba(220, 53, 69, 0.3);
+        }
+        .status-text {
+            font-size: 18px;
+            font-weight: 600;
+            margin-top: 25px;
+            color: #444;
+        }
+        #lblStatus {
+            padding: 4px 12px;
+            border-radius: 20px;
+            color: white;
+            font-size: 16px;
+            margin-left: 5px;
+        }
+        .divider {
+            border: none;
+            border-top: 1px solid #e3e6ea;
+            margin: 28px 0;
+        }
+        .row {
+            display: flex;
+            gap: 8px;
+        }
+        #txtDaySo {
+            flex: 1;
+            padding: 10px 12px;
+            font-size: 16px;
+            border: 1px solid #ccd0d5;
+            border-radius: 8px;
+            outline: none;
+        }
+        #txtDaySo:focus { border-color: #007bff; }
+        #btnGui {
+            padding: 10px 18px;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+            background: #007bff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        #btnGui:hover { background: #0062cc; }
+        .value-box {
+            margin-top: 14px;
+            font-size: 16px;
+            color: #444;
+        }
+        #lblDaySo {
+            display: inline-block;
+            margin-left: 5px;
+            padding: 4px 12px;
+            background: #eef3ff;
+            color: #1a4fd6;
+            border-radius: 8px;
+            font-weight: 600;
+            word-break: break-all;
+        }
+        #lblDebug {
+            margin-top: 20px;
+            font-size: 13px;
+            color: #888;
+            word-break: break-word;
+        }
+    </style>
+
+    <!-- Thu vien Firebase ban compat (dung duoc voi file HTML thuong) -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <h2>BẢNG ĐIỀU KHIỂN IoT</h2>
+
+        <!-- Thiet bi 1: nut ON/OFF -->
+        <button id="btnToggle" class="btn-control status-off">OFF</button>
+        <div class="status-text">
+            Thiết bị 1: <span id="lblStatus" style="background-color: #dc3545;">ĐANG TẮT</span>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Thiet bi 2: gui day so (chuoi) -->
+        <h3>Thiết bị 2: Gửi chuỗi ký tự</h3>
+        <div class="row">
+            <input type="text" id="txtDaySo" placeholder="Nhập ký tự bất kỳ, vd: abc123" autocomplete="off">
+            <button id="btnGui">Gửi</button>
+        </div>
+        <div class="value-box">
+            Giá trị hiện tại: <span id="lblDaySo">...</span>
+        </div>
+
+        <!-- Dong hien thi trang thai ket noi va loi that -->
+        <div id="lblDebug">Dang ket noi...</div>
+    </div>
+
+    <script>
+        // Cau hinh Firebase - copy chinh xac tu Firebase Console
+        const firebaseConfig = {
+            apiKey: "AIzaSyDEb7ER4t3p27n45vJcEgsbk7YmORju6bY",
+            authDomain: "test-wemode-r1.firebaseapp.com",
+            databaseURL: "https://test-wemode-r1-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "test-wemode-r1",
+            storageBucket: "test-wemode-r1.firebasestorage.app",
+            messagingSenderId: "752633842555",
+            appId: "1:752633842555:web:041090132b021cd318cbde"
+        };
+
+        let currentStatus = 0;
+        const btnToggle = document.getElementById('btnToggle');
+        const lblStatus = document.getElementById('lblStatus');
+        const lblDebug = document.getElementById('lblDebug');
+        const txtDaySo = document.getElementById('txtDaySo');
+        const btnGui = document.getElementById('btnGui');
+        const lblDaySo = document.getElementById('lblDaySo');
+
+        // Ham cap nhat giao dien thiet bi 1 (1 = ON xanh, 0 = OFF do)
+        function capNhatGiaoDien(status) {
+            currentStatus = status;
+            if (status === 1) {
+                btnToggle.innerText = "ON";
+                btnToggle.className = "btn-control status-on";
+                lblStatus.innerText = "ĐANG BẬT";
+                lblStatus.style.backgroundColor = "#28a745";
+            } else {
+                btnToggle.innerText = "OFF";
+                btnToggle.className = "btn-control status-off";
+                lblStatus.innerText = "ĐANG TẮT";
+                lblStatus.style.backgroundColor = "#dc3545";
+            }
+        }
+
+        // Ham hien thi thong bao trang thai/loi
+        function hienThongBao(noiDung, mau) {
+            lblDebug.innerText = noiDung;
+            lblDebug.style.color = mau;
+        }
+
+        try {
+            // Kiem tra thu vien da tai duoc chua
+            if (typeof firebase === 'undefined') {
+                throw new Error("Khong tai duoc thu vien Firebase (kiem tra mang / link script)");
+            }
+
+            firebase.initializeApp(firebaseConfig);
+            const database = firebase.database();
+            const thietbi1Ref = database.ref('thietbi1');
+            const thietbi2Ref = database.ref('thietbi2');
+
+            // Theo doi trang thai ket noi toi server Firebase
+            database.ref('.info/connected').on('value', (snap) => {
+                if (snap.val()) {
+                    hienThongBao("Firebase: DA KET NOI", "#28a745");
+                } else {
+                    hienThongBao("Firebase: MAT KET NOI", "#dc3545");
+                }
+            });
+
+            // ===== THIET BI 1: doc/ghi trang thai ON/OFF =====
+            thietbi1Ref.on('value', (snapshot) => {
+                let val = parseInt(snapshot.val());
+                if (isNaN(val)) val = 0;
+                capNhatGiaoDien(val);
+            }, (err) => {
+                hienThongBao("Loi doc thietbi1: " + err.message, "#dc3545");
+            });
+
+            btnToggle.addEventListener('click', () => {
+                const nextStatus = (currentStatus === 1) ? 0 : 1;
+                thietbi1Ref.set(nextStatus).catch((err) => {
+                    hienThongBao("Loi ghi thietbi1: " + err.message, "#dc3545");
+                });
+            });
+
+            // ===== THIET BI 2: doc/ghi chuoi (day so) =====
+            thietbi2Ref.on('value', (snapshot) => {
+                const val = snapshot.val();
+                lblDaySo.innerText = (val === null || val === "") ? "(trong)" : String(val);
+            }, (err) => {
+                hienThongBao("Loi doc thietbi2: " + err.message, "#dc3545");
+            });
+
+            // Ham gui day so len Firebase duoi dang chuoi
+            function guiDaySo() {
+                const chuoi = txtDaySo.value.trim();
+                if (chuoi === "") {
+                    hienThongBao("Vui long nhap day so truoc khi gui", "#dc3545");
+                    return;
+                }
+                // Cho phep nhap ky tu bat ky (chu, so, ky tu dac biet)
+                thietbi2Ref.set(chuoi).then(() => {
+                    hienThongBao("Da gui: " + chuoi, "#28a745");
+                    txtDaySo.value = "";
+                }).catch((err) => {
+                    hienThongBao("Loi ghi thietbi2: " + err.message, "#dc3545");
+                });
+            }
+
+            btnGui.addEventListener('click', guiDaySo);
+            // Nhan Enter de gui nhanh
+            txtDaySo.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') guiDaySo();
+            });
+
+        } catch (e) {
+            // Hien loi that, sau do chay che do mo phong offline
+            hienThongBao("Loi: " + e.message + " (dang chay mo phong)", "#dc3545");
+            console.error(e);
+
+            btnToggle.addEventListener('click', () => {
+                capNhatGiaoDien(currentStatus === 1 ? 0 : 1);
+            });
+            btnGui.addEventListener('click', () => {
+                lblDaySo.innerText = txtDaySo.value.trim() || "(trong)";
+            });
+        }
+    </script>
+</body>
+</html>
